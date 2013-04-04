@@ -15,8 +15,9 @@ module Batsd
     # * Set up a diskstore client to write aggregates to disk
     #
     def initialize(options)
-      @redis = Batsd::Redis.new(options)
+      @redis     = Batsd::Redis.new(options)
       @diskstore = Batsd::Diskstore.new(options[:root])
+      @gauges    = populate_gauges
       super
     end
 
@@ -29,13 +30,29 @@ module Batsd
     def handle(key, value, sample_rate)
       @threadpool.queue Time.now.to_i, key, value, sample_rate do |timestamp, key, value, sample_rate|
         puts "Received #{key} #{value} #{sample_rate}" if ENV["VVERBOSE"]
-        if sample_rate
-          value = value.to_f / sample_rate.gsub("@", "").to_f
+        # if sample_rate
+        #   value = value.to_f / sample_rate.gsub("@", "").to_f
+        # end
+
+        adjusted = if (@gauges[key] && value.match(/^[\-\+]/))
+          @gauges[key] += value.to_i
+        else
+          @gauges[key] = value.to_i
         end
-        value = "#{timestamp} #{value}"
+
+        value = "#{timestamp} #{adjusted}"
         key   = "gauges:#{key}"
-        @diskstore.append_value_to_file(@diskstore.build_filename(key), value)
+        @diskstore.append_value_to_file(@diskstore.build_filename(key), adjusted)
         @redis.add_datapoint key
+      end
+    end
+
+    def populate_gauges
+      keys = @redis.datapoints(true).select{ |i| i.start_with?("gauges:") }
+      keys.each_with_object({}) do |key, hsh|
+        val   = @diskstore.current_value(@diskstore.build_filename(key))
+        gauge = key.gsub("gauges:", "")
+        hsh[gauge] = val.to_i
       end
     end
 

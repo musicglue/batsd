@@ -68,6 +68,15 @@ module Batsd
       datapoints
     end
 
+
+    def current_value(filename)
+      `tail -n 1 #{filename}`.chomp
+    rescue Errno::ENOENT => e
+      puts "Encountered an error trying to read #{filename}: #{e}" if ENV["VVERBOSE"] 
+    rescue Exception => e
+      puts "Encountered an error trying to read #{filename}: #{e}"
+    end
+
     # Truncates a file by rewriting to a temp file everything after the since
     # timestamp that is provided. The temp file is then renaemed to the
     # original.
