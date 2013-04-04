@@ -40,9 +40,9 @@ module Batsd
           @gauges[key] = value.to_i
         end
 
-        value = "#{timestamp} #{adjusted}"
+        writeable = "#{timestamp} #{adjusted}"
         key   = "gauges:#{key}"
-        @diskstore.append_value_to_file(@diskstore.build_filename(key), adjusted)
+        @diskstore.append_value_to_file(@diskstore.build_filename(key), writeable)
         @redis.add_datapoint key
       end
     end
@@ -52,7 +52,7 @@ module Batsd
       keys.each_with_object({}) do |key, hsh|
         val   = @diskstore.current_value(@diskstore.build_filename(key))
         gauge = key.gsub("gauges:", "")
-        hsh[gauge] = val.to_i
+        hsh[gauge] = val.split(" ").last.to_i
       end
     end
 
